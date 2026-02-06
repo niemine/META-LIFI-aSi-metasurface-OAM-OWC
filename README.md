@@ -93,3 +93,8 @@ If generating lithography masks:
 ## Metadata
 
 Detailed metadata describing simulation parameters, physical constants, and variable definitions can be found in the `_metadata.txt` files located within each subfolder. Refer to these files for precise experimental conditions.
+
+
+## Keywords
+
+Metasurfaces, Orbital Angular Momentum (OAM), Optical Wireless Communication (OWC), FDTD Simulation, RCWA, Amorphous Silicon (a-Si), GDSII, Lithography Mask, Nanophotonics, Lumerical Scripting, MATLAB Analysis, Vortex Beams, Free-Space Optics, Broadband Simulation.
