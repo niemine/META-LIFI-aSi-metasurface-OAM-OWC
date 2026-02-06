@@ -1,0 +1,57 @@
+clear;
+closeall;
+# Load your function library containing stitchNearField1 (or stitchInitField);
+initialField;
+
+wavelengths = 1214:24:1550;
+
+# Loop over the specific OAM modes
+for (lmode = [-5,-4,-3,-2,-1,1,2,3,4,5]){
+    OAM_mode = lmode;
+    OAM_mode_str = num2str(OAM_mode);
+    
+    # Loop over the wavelengths
+    for (Ind = 1:length(wavelengths)){
+        closeall;
+        
+        wavelength = wavelengths(Ind);
+        wavelengthstr = num2str(wavelength);
+        
+        # Name of the file containing radius/phase data for this wavelength
+        input_radius_filename = 'radiusData' + wavelengthstr;
+        
+        # --- Simulation Parameters ---
+        lensRadius = 49.9e-6;
+        OAM_modes = [OAM_mode]; # set OAM modes in the beam, as list of numbers
+        focalLength = 100e-6; 
+        deflectionAngle = 0; 
+        gaussianW0 = 30e-6;
+        phaseDiscretation = 12;
+        
+        # Farfield settings (if used inside the function, otherwise optional here)
+        farfieldsettings("override near field mesh",true);
+        farfieldsettings("near field samples per wavelength",2); 
+        
+        # --- Generate the Near Field ---
+        # Calling your function (assuming it returns the rectilinear dataset)
+        lensNearField = stitchInitField(lensRadius, OAM_modes, focalLength, phaseDiscretation, deflectionAngle, gaussianW0, input_radius_filename);
+        #visualize(lensNearField);
+        # (Optional) If you need to inspect specific field components in the GUI
+        En = pinch(lensNearField.E);
+        En = En(:,:,1);
+        En = pinch(En);
+        E_inputn = pinch(lensNearField.E_input);
+        E_inputn = E_inputn(:,:,1);
+        E_inputn = pinch(E_inputn);
+  
+        
+        # --- Save the Data ---
+        # Construct the unique filename: e.g., "beamData1310l-1"
+        output_filename = 'nearFieldData' + wavelengthstr + 'l' + OAM_mode_str;
+        
+        # Save the rectilinear dataset (which now includes E_input) to the .mat file
+        matlabsave(output_filename, lensNearField,En,E_inputn);
+        
+        print("Saved: " + output_filename);
+    }
+}

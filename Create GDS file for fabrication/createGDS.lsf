@@ -1,0 +1,25 @@
+
+matlabload("spiral_phase_plate_data");
+matlabload("vertices_vs_phase");
+
+ind = find(X^2+Y^2<=RL^2);
+xi = X(ind);
+yi = Y(ind);
+
+phaseList = phaseList(1:end-1);
+vertices = V{find(phaseList,phaseMask(ind))};
+
+f=gdsopen(filename); 
+cellname = 'pillars';
+layer = 1;
+
+gdsbegincell(f,cellname);
+
+for (i=1:length(ind)) {
+    Nv = length(vertices{i})/2;
+    gdsaddpoly(f,layer,vertices{i}+xi(i)*[ones(Nv),zeros(Nv)]+yi(i)*[zeros(Nv),ones(Nv)]);
+    #TODO: Fix gdsaddcircle with the pillarMap, much better result expected
+    #gdsaddcircle(f,layer,vertices{i}+xi(i)*[ones(Nv),zeros(Nv)]+yi(i)*[zeros(Nv),ones(Nv)]);
+}
+gdsendcell(f);# finish "cell_1"
+gdsclose(f);# close the current .gds file

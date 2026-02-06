@@ -1,0 +1,24 @@
+# create vertices vs. phase for unit cells
+##########################################
+matlabload("spiral_phase_plate_data.mat");
+phase = phaseList(1:end-1);
+radius = radList(1:end-1);
+
+plot(phase*180/pi,2*radius*1e9,"Phase (degree)","Diameter (nm)","Phase vs Radius","plot type=point,color=blue,marker style = o, marker size = 20");
+legend("");
+
+load("unit_cell.fsp");
+N = length(radius);
+V = cell(N);
+for (i=1:length(radius)) {
+    setnamed("::model","radius",radius(i));
+    runsetup;
+    Result = polystencil({"material": "pillar", "partialname":"pillar","z":height/2});
+    V{i} = Result{1}{1}{1};
+}
+#visualize(phase_target);
+#visualize(phaseMask);
+#visualize(pillarMask*1e9);
+
+#V{end} = V{1};
+matlabsave("vertices_vs_phase",V,phase);

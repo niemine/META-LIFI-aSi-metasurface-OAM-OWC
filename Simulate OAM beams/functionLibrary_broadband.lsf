@@ -1,0 +1,167 @@
+function stitchNearField1(RL, OAMs, FL, numPoints,deflectionAngle,w0,wavelengthFile){
+matlabload("radiusData1310");
+radiusleftInd = find(2*radius*1e6,0.3317);
+radiusrightInd = find(2*radius*1e6,0.356);
+phase1 = phase(1:radiusleftInd);
+phase2 = phase(radiusrightInd:end);
+phaseCut = [phase1;phase2];
+phaseDesign = phaseCut;
+
+matlabload(wavelengthFile);
+radiusleftInd = find(2*radius*1e6,0.3317);
+radiusrightInd = find(2*radius*1e6,0.356);
+radius1 = radius(1:radiusleftInd);
+radius2 = radius(radiusrightInd:end);
+phase1 = phase(1:radiusleftInd);
+Transm1 = Transm(1:radiusleftInd);
+phase2 = phase(radiusrightInd:end);
+Transm2 = Transm(radiusrightInd:end);
+
+radiusCut = [radius1;radius2];
+TransmCut = [Transm1;Transm2];
+phaseCut = [phase1;phase2];
+
+radius = radiusCut;
+Transm_real = TransmCut;
+phase_real = phaseCut;
+
+background_index = 1;
+np = floor(RL/period); # number of unit cells used in x and y axes to construct the lens
+xMask = period*(-np:np);
+yMask = period*(-np:np);
+
+X = meshgridy(xMask,yMask);
+Y = meshgridx(xMask,yMask);
+
+#phase_target = mod(l0*atan2(Y,X),2*pi);
+#phase_target_OAM = mod(-l0*atan2(Y,X),2*pi);
+#phase_target_lens = -mod((2*pi/wavelength)*(sqrt(X^2+Y^2+FL^2)-FL),2*pi);
+#phase_target = mod(phase_target_OAM + phase_target_lens,2*pi);
+
+Efield = 0;
+diffractionAngles = linspace(0,2*pi - 2*pi/size(OAMs,2),size(OAMs,2));
+theta = deflectionAngle * pi/180; #converted to radians from degrees
+for (el=1:size(OAMs,2)){
+    if(size(OAMs,1) == 2){
+        weight = OAMs(2,el);
+        } else {
+        weight = 1;} 
+        
+    diffr = diffractionAngles(el);
+    phaseOAM = -OAMs(1,el)*atan2(Y,X);
+    phaseDeflect = -2*pi/wavelength*(X*sin(diffr) + Y*cos(diffr))*sin(theta);
+    Efield = Efield + weight*exp(1i*mod(phaseOAM + phaseDeflect,2*pi));
+}
+phase_target_OAM = -mod(angle(Efield),2*pi);
+
+phase_target_lens = -mod((2*pi/wavelength)*(sqrt(X^2+Y^2+FL^2)-FL),2*pi);
+
+phase_target = mod(phase_target_OAM + phase_target_lens,2*pi);
+
+
+phaseMask = 0*phase_target;
+pillarMask = 0*phase_target;
+transmissionMask = 0*phase_target;
+
+phaseList = linspace(0,2*pi,numPoints+1);
+radList = 0*phaseList;
+transList = 0*phaseList;
+realPhaseList = 0*phaseList;
+
+for (i = 1:length(phaseList)){
+    phaseCheck =  phaseList(i);
+    ind = find(abs(phaseCheck - phaseDesign),0);
+    realPhaseList(i) = phase_real(ind);
+    radList(i) = radius(ind);
+    transList(i) = Transm_real(ind);
+    
+}   
+transList(end) = transList(1);
+radList(end) = radList(1);
+
+#Loop over pillars
+for (yInd = 1:size(phase_target,1)){
+    for( xInd = 1:size(phase_target,1)){
+        phaseVal = phase_target(yInd,xInd);
+        ind = find(abs(phaseVal-phaseList),0);
+        phaseMask(yInd,xInd) = mod(realPhaseList(ind),2*pi);
+        pillarMask(yInd,xInd) = radList(ind);
+        transmissionMask(yInd,xInd) = transList(ind);
+    }
+}
+
+
+z = 0;
+x = xMask;
+y = yMask;
+
+Nx = size(phaseMask,1);
+Ny = size(phaseMask,2);
+
+
+Enear_lens = Hnear_lens = matrix(Ny,Nx,3);
+R = sqrt(X^2+Y^2);
+R_mask = (R <= RL);
+gaussMask = exp(-2*R^2/(w0)^2);
+Enear_lens(:,:,1) = gaussMask*R_mask*sqrt(2*transmissionMask)*exp(1i*phaseMask);
+
+
+# create a dataset of the stiched nearfield
+EH_lens = rectilineardataset("EH_lens",x,y,z);
+EH_lens.addparameter("f",c/wavelength,"lambda",wavelength);
+EH_lens.addattribute("E",Enear_lens);
+EH_lens.addattribute("H",Hnear_lens);
+
+
+
+return EH_lens;
+
+}
+
+function EHfieldsAtZ(EH_lens,xf,yf,zf){
+    
+farfieldsettings("override near field mesh",true);
+farfieldsettings("near field samples per wavelength",2); # at Nyquist limit
+ 
+zm = zf(end);
+
+# farfield in x diirection at the focal point (y=0,z=zm)
+E = farfieldexact3d(EH_lens,xf,0,zm);
+E2 = pinch(sum(abs(E)^2,4));
+#plot(xf*1e6,E2,'x (um)','|E|^2 (V^2/m^2)','Farfield at max distance','linewidth=2');
+#legend("");
+
+# farfield in xz plane
+E = farfieldexact3d(EH_lens,xf,0,zf);
+E2 = pinch(sum(abs(E)^2,4));
+#image(xf*1e6,zf*1e6,E2,'x (um)','z (um)','|E|^2 (x-z plane)');
+
+# farfield in yz plane
+E = farfieldexact3d(EH_lens,0,yf,zf);
+E2 = pinch(sum(abs(E)^2,4));
+#image(xf*1e6,zf*1e6,E2,'x (um)','z (um)','|E|^2 (y-z plane)');
+
+# farfield in xy focal plane
+E = farfieldexact3d(EH_lens,xf,yf,zm);
+
+E2 = pinch(sum(abs(E)^2,4));
+#image(xf*1e6,yf*1e6,E2,'x (um)','y (um)','|E|^2 (x-y plane)');
+# farfield phase in xy focal plane
+Ex = E(:,:,:,1);
+Eargx = pinch(angle(Ex));
+#image(xf*1e6,yf*1e6,Eargx,'x (um)','y (um)','Phase(Ex) (x-y plane)');
+
+nx = ny = 501; # number of points used for farfield projection
+
+E2far_lens2 = farfield3d(EH_lens,1,nx,ny); # farfield projection from stiched field dataset
+ux2 = farfieldux(EH_lens,1,nx,ny);
+uy2 = farfielduy(EH_lens,1,nx,ny);
+#polarimage(ux2,uy2,E2far_lens2,"farfield from stitched nearfield");
+
+E_and_H = farfieldexact3d(EH_lens,xf,yf,zm,{"field":"E and H"});
+return E_and_H;
+}
+
+
+
+

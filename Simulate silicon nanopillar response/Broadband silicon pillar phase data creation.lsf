@@ -1,0 +1,144 @@
+##############################################################################
+# Script Name: RCWA_UnitCell_Sweep.lsf
+# Description: 
+#   This script performs a radius sweep of a unit cell metasurface pillar 
+#   using the RCWA solver. It loops over a broadband wavelength range 
+#   (1214 nm to 1550 nm) and saves the transmission and phase data for 
+#   each wavelength into separate MATLAB (.mat) files.
+#
+#   Output Files: radiusDataXXXX.mat (where XXXX is the wavelength in nm)
+##############################################################################
+
+## --- 1. Initialization and Cleanup ---
+clear;
+closeall;
+deleteall;
+
+## --- 2. Global Constants and Sweep Parameters ---
+units = 1e-6;                 # Base unit scaling (microns)
+wavelengths_nm = 1214:24:1550; # Wavelength range in nm
+radius_arr = linspace(0.07, 0.41/2, 101) * units; # Radius sweep vector
+height = 1.0 * units;         # Pillar height
+period = 0.6 * units;         # Unit cell period
+half_period = 0.5 * period;
+
+## --- 3. Construct Physical Geometry (Objects) ---
+# We create the objects once and modify their properties in the loops.
+
+# Setup Simulation Region (FDTD object is often required for material database access)
+addfdtd;
+set("x min", -half_period);
+set("x max",  half_period);
+set("y min", -half_period);
+set("y max",  half_period);
+set("z min", -1.0 * units);
+set("z max",  2.0 * units);
+set("index", 1); # Background index (Air)
+
+# Substrate
+addrect;
+set("name", "substrate");
+set("z min", -1.0 * units);
+set("z max", 0);
+set("x span", 2 * period); # Make larger than unit cell to avoid edge effects
+set("y span", 2 * period);
+set("material", "SiO2 (Glass) - Palik");
+
+# Pillar
+addcircle;
+set("name", "pillar");
+set("z min", 0);
+set("z max", height);
+set("radius", radius_arr(1)); # Initialize with first radius
+set("x", 0);
+set("y", 0);
+set("material", "siliconEind"); # Ensure this material exists in your database
+
+## --- 4. Configure RCWA Settings ---
+# Geometry struct for RCWA solver
+geometry = struct;
+geometry.injection_axis = "z-axis";
+geometry.x_min = -half_period;
+geometry.x_max =  half_period;
+geometry.y_min = -half_period;
+geometry.y_max =  half_period;
+geometry.z_min = -0.25 * units; # Slightly below substrate interface
+geometry.z_max =  1.5 * units;  # Slightly above pillar top
+geometry.layer_positions = [0, height]; # Interfaces for the solver
+
+# Excitation struct for RCWA solver
+excitation = struct;
+excitation.phi  = 0;
+excitation.theta = 0;
+excitation.p_pol = 1; # TM polarization (can be changed to 0 for TE)
+excitation.direction = "forward";
+
+# RCWA Options
+rcwa_options = {"max_N": 50, "report_amplitudes": true};
+
+
+## --- 5. Main Processing Loops ---
+
+# Loop 1: Wavelength Sweep
+for(i_wl = 1:length(wavelengths_nm)) {
+    
+    current_wl_nm = wavelengths_nm(i_wl);
+    current_wl_m  = current_wl_nm * 1e-9;
+    
+    print("Processing Wavelength: " + num2str(current_wl_nm) + " nm (" + num2str(i_wl) + "/" + num2str(length(wavelengths_nm)) + ")");
+
+    # Update Source Frequency
+    excitation.f = c / current_wl_m;
+    
+    # Initialize data arrays for this wavelength
+    T_rcwa = matrix(length(radius_arr));
+    Phase_rcwa = matrix(length(radius_arr));
+    Amplitude_rcwa = matrix(length(radius_arr));
+
+    # Loop 2: Radius Sweep
+    for(i_rad = 1:length(radius_arr)) {
+        
+        # Update Pillar Geometry
+        setnamed("pillar", "radius", radius_arr(i_rad));
+        
+        # Run RCWA Solver
+        results = rcwa(geometry, excitation, rcwa_options);
+        
+        # --- Extract Transmission (T) ---
+        TE = results.TotalEnergy;
+        T_rcwa(i_rad) = TE.T;
+        
+        # --- Extract Phase and Amplitude ---
+        # We look at the central forward diffraction order
+        Amplitudes = results.Amplitudes;
+        ekxf = pinch(Amplitudes.ekx_f); # Forward transmission E-field
+        
+        # Find the index of the 0th order mode (center of the matrix)
+        s_amp = size(ekxf);
+        mid_elt = (s_amp(1) + 1) / 2;
+        
+        Phase_rcwa(i_rad)     = angle(ekxf(mid_elt, mid_elt));
+        Amplitude_rcwa(i_rad) = abs(ekxf(mid_elt, mid_elt));
+    }
+    
+    ## --- 6. Post-Processing and Saving ---
+    
+    # Unwrap Phase (normalize relative to the first radius point)
+    norm_phase = unwrap(Phase_rcwa) - Phase_rcwa(1);
+    
+    # Prepare Variables for Export
+    # Naming convention matches the user's request
+    wavelength = current_wl_m;
+    phase      = norm_phase;
+    radius     = radius_arr;
+    Transm     = T_rcwa;
+    
+    # Construct Filename: e.g., radiusData1310
+    filename = "radiusData" + num2str(current_wl_nm);
+    
+    # Save to MATLAB file
+    matlabsave(filename, wavelength, height, period, phase, radius, Transm);
+    print("Saved data to " + filename + ".mat");
+}
+
+print("Broadband sweep complete.");

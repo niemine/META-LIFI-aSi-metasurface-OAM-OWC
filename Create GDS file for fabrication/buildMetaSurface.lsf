@@ -1,0 +1,93 @@
+
+
+matlabload('metaS_data.mat');
+RL = lensRadius;
+FL = focalLength;
+numPoints = phaseDiscretation;
+
+
+matlabload("radiusData1310");
+radiusleftInd = find(2*radius*1e6,0.3317);
+radiusrightInd = find(2*radius*1e6,0.356);
+radius1 = radius(1:radiusleftInd);
+radius2 = radius(radiusrightInd:end);
+phase1 = phase(1:radiusleftInd);
+Transm1 = Transm(1:radiusleftInd);
+phase2 = phase(radiusrightInd:end);
+Transm2 = Transm(radiusrightInd:end);
+
+radiusCut = [radius1;radius2];
+TransmCut = [Transm1;Transm2];
+phaseCut = [phase1;phase2];
+
+radius = radiusCut;
+Transm = TransmCut;
+phase = phaseCut;
+
+background_index = 1;
+np = 1*floor(RL/period);
+xMask = period*(-np:np);
+yMask = period*(-np:np);
+
+X = meshgridy(xMask,yMask);
+Y = meshgridx(xMask,yMask);
+
+Efield = 0;
+diffractionAngles = linspace(0,2*pi - 2*pi/size(OAMs,2),size(OAMs,2));
+theta = deflectionAngle * pi/180; #converted to radians from degrees
+for (el=1:size(OAMs,2)){
+    if(size(OAMs,1) == 2){
+        weight = OAMs(2,el);
+        } else {
+        weight = 1;} 
+        
+    diffr = diffractionAngles(el);
+    phaseOAM = -OAMs(1,el)*atan2(Y,X);
+    phaseDeflect = -2*pi/wavelength*(X*sin(diffr) + Y*cos(diffr))*sin(theta);
+    Efield = Efield + weight*exp(1i*mod(phaseOAM + phaseDeflect,2*pi));
+}
+phase_target_OAM = -mod(angle(Efield),2*pi);
+
+phase_target_lens = -mod((2*pi/wavelength)*(sqrt(X^2+Y^2+FL^2)-FL),2*pi);
+
+phase_target = mod(phase_target_OAM + phase_target_lens,2*pi);
+
+image(yMask*1e6,xMask*1e6,phase_target,"x (um)","y (um)","phase (rad)");
+
+phaseMask = 0*phase_target;
+pillarMask = 0*phase_target;
+transmissionMask = 0*phase_target;
+
+phaseList = linspace(0,2*pi,numPoints+1);
+radList = 0*phaseList;
+transList = 0*phaseList;
+
+for (i = 1:length(phaseList)){
+    phaseCheck =  phaseList(i);
+    ind = find(abs(phaseCheck - phase),0);
+    radList(i) = radius(ind);
+    transList(i) = Transm(ind);
+}   
+transList(end) = transList(1);
+radList(end) = radList(1);
+
+#Loop over pillars
+for (yInd = 1:size(phase_target,1)){
+    for( xInd = 1:size(phase_target,1)){
+        phaseVal = phase_target(yInd,xInd);
+        ind = find(abs(phaseVal-phaseList),0);
+        phaseMask(yInd,xInd) = mod(phaseList(ind),2*pi);
+        pillarMask(yInd,xInd) = radList(ind);
+        transmissionMask(yInd,xInd) = transList(ind);
+    }
+}
+
+#visualize(phase_target);
+#visualize(phaseMask);
+#visualize(pillarMask*1e9);
+image(yMask*1e6,xMask*1e6,phaseMask,"x (um)","y (um)","Pillar phase (rad)");
+
+matlabsave("spiral_phase_plate_data.mat",phaseMask,pillarMask,phaseList,radList,X,Y,RL, OAMs, FL, numPoints,deflectionAngle,phase_target,filename,phase);
+
+
+

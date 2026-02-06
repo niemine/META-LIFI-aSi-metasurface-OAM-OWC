@@ -1,0 +1,53 @@
+clear;
+closeall;
+functionLibrary_broadband;
+wavelengths = 1214:24:1550;
+for (lmode = [-5,-4,-3,-2,-1,1,2,3,4,5]){
+    OAM_mode = lmode;
+    
+    for (Ind = 1:size(wavelengths,1)){
+        closeall;
+        wavelength = wavelengths(Ind);
+        wavelengthstr = num2str(wavelength);
+        filename = 'radiusData' + wavelengthstr;
+        #functionLibrary2;
+        lensRadius = 49.9e-6;
+        OAM_mode_str = num2str(OAM_mode);
+        OAM_modes = [OAM_mode]; #set OAM modes in the beam, as list of numbers
+        focalLength = 100e-6; # set focus length
+        deflectionAngle = 0; # determine deflection angle, with 0 all modes at optical axis
+        gaussianW0 = 30e-6;
+        
+        farfieldsettings("override near field mesh",true);
+        farfieldsettings("near field samples per wavelength",2); # at Nyquist limit
+        
+        
+        #nx = ny = 501; # number of points used for farfield projection
+        phaseDiscretation = 12;
+        lensNearField = stitchNearField1(lensRadius, OAM_modes, focalLength, phaseDiscretation, deflectionAngle,gaussianW0,filename);
+        #visualize(lensNearField);
+        #matlabsave("nearField", lensNearField);
+        
+        
+        
+        # set the distance we want to propagate
+        # this can be tuned to see what is the correct propagation distance
+        propagationDistances = linspace(2e-6,100e-6,100);
+        # determines the cross section we look at
+        # Tune to cover the whole beam at specific distance
+        xyInterval = 25e-6;
+        
+        xf = linspace(-xyInterval,xyInterval,300);
+        yf = linspace(-xyInterval,xyInterval,300);
+        EH = EHfieldsAtZ(lensNearField,xf,yf,propagationDistances);
+        #visualize(EH);
+        Ef = pinch(EH.E);
+        Ef = Ef(:,:,1);
+        Ef = pinch(Ef);
+        
+        beamdataFile = 'beamData' + wavelengthstr + 'l' + OAM_mode_str ;
+        savedata(beamdataFile, EH,Ef);
+        matlabsave(beamdataFile, EH,Ef);
+    
+    }
+}

@@ -1,0 +1,21 @@
+clear;
+closeall;
+
+fileInd=1;
+lensRadius = 250e-6;
+phaseDiscretation = 12;
+
+focalLength = 200e-0;
+deflectionAngle = 0;
+
+fileformat ='.gds';
+
+for (i=1:2) {
+    OAMs=i;
+    filename = num2str(fileInd) + '_OAM_' + num2str(OAMs) + fileformat;
+    matlabsave('metaS_data',lensRadius, OAMs, focalLength, phaseDiscretation,deflectionAngle,filename);
+    buildMetaSurface;
+    create_vertices;
+    createGDS;   
+    fileInd = fileInd + 1;
+}
